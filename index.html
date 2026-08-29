@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Majique</title>
+<style>
+  body {
+    font-family: sans-serif;
+    background: #f4f4f4;
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .card {
+    position: absolute;
+    width: 240px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 12px;
+    box-sizing: border-box;
+    cursor: grab;
+    user-select: none;
+  }
+
+  .card:active {
+    cursor: grabbing;
+  }
+
+  .card.active {
+    border-color: #4a90d9;
+    box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.4);
+  }
+
+  .card.editing {
+    height: 200px;
+    cursor: text;
+  }
+
+  .card-textarea {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 0;
+  }
+
+  .card h3 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+  }
+
+  .card p {
+    margin: 0;
+    font-size: 13px;
+    color: #555;
+    white-space: pre-wrap;
+  }
+
+  #canvas-container {
+    height: 0;
+    width: 0;
+    overflow: visible;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+  }
+  #magic-canvas {
+  }
+
+  #toolbox-toggle {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 1001;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid #ccc;
+    background: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  #toolbox-toggle:hover {
+    background: #f0f0f0;
+  }
+
+  #toolbox-panel {
+    position: fixed;
+    top: 50px;
+    left: 10px;
+    z-index: 1000;
+    width: 200px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #toolbox-panel.hidden {
+    display: none;
+  }
+
+  #toolbox-list {
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 6px;
+  }
+
+  .toolbox-item {
+    position: relative;
+    padding: 6px 22px 6px 8px;
+    margin-bottom: 4px;
+    background: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: grab;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .toolbox-item:active {
+    cursor: grabbing;
+  }
+
+  .toolbox-item-delete {
+    display: none;
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    line-height: 16px;
+    text-align: center;
+    padding: 0;
+    border: 1px solid #ccc;
+    border-radius: 50%;
+    background: #fff;
+    color: #a33;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .toolbox-item-delete:hover {
+    background: #fee;
+  }
+
+  .toolbox-item:hover .toolbox-item-delete {
+    display: block;
+  }
+
+  #toolbox-add {
+    border: none;
+    border-top: 1px solid #e0e0e0;
+    background: #fff;
+    padding: 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  #toolbox-add:hover {
+    background: #f0f0f0;
+  }
+
+</style>
+</head>
+<body>
+  <button id="toolbox-toggle" title="Toolbox">🧰</button>
+  <div id="toolbox-panel" class="hidden">
+    <div id="toolbox-list"></div>
+    <button id="toolbox-add">+ Add highlighted card</button>
+  </div>
+
+  <div id='canvas-container'>
+    <canvas id='magic-canvas'></canvas>
+  </div>
+  <script src="parser.js"></script>
+  <script src="datalog-engine.js"></script>
+  <script src="bootstrap.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

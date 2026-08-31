@@ -1,9 +1,7 @@
 var Parser = (function () {
 
-  // TODO allow special characters in strings
   // TODO honestly, the whole parser needs to be redone
-  const codeRegex = /When|End|Claim|Wish|[,:.[\]]|(?<isWhitespace>\s+)|;[^\n]*|[^WEC,:.\]]+/g;
-  const phraseRegex = /(?<string>"[^"]*")|\((?<expr>[^)]*)\)/g;
+  const codeRegex = /(?<isWhitespace>\s+)|(?<isComment>;[^\n]*)|[,:.[\]()]|"[^\\"]*(\\.[^\\"]*)*"|(?<isNumber>-?\d[\d.]*)|[^\s,:.[\]()]+/g;
 
   // Private functions
 

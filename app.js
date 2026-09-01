@@ -50,7 +50,8 @@ function setupCard(card) {
   var startY = 0;
 
   card.addEventListener('mousedown', function (e) {
-    document.body.appendChild(card); // bring to front
+    if(!editingCard || editingCard !== card)
+      document.body.appendChild(card); // bring to front
 
     // Starting to interact with a different card ends editing on the current one.
     if (editingCard && editingCard !== card) {

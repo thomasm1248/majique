@@ -54,15 +54,13 @@ function setupCard(card) {
       document.body.appendChild(card); // bring to front
 
     // Starting to interact with a different card ends editing on the current one.
-    if (editingCard && editingCard !== card) {
+    if (editingCard && editingCard !== card)
       exitEditMode();
-    }
 
     // Don't start a drag if we're clicking inside the card that's being edited
     // (e.g. clicking into the textarea to place the cursor).
-    if (editingCard === card) {
+    if (editingCard === card)
       return;
-    }
 
     dragging = true;
     moved = false;
@@ -76,9 +74,8 @@ function setupCard(card) {
     mouseX = e.clientX;
     mouseY = e.clientY;
     if (!dragging) return;
-    if (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3) {
+    if (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3)
       moved = true;
-    }
     card.style.left = (e.clientX - offsetX) + 'px';
     card.style.top = (e.clientY - offsetY) + 'px';
   });
@@ -124,18 +121,16 @@ function createCard(x, y) {
 
 // Right-click on the background creates a new card.
 document.addEventListener('contextmenu', function (e) {
-  if (e.target.closest('.card') || e.target.closest('#toolbox-panel') || e.target.closest('#toolbox-toggle')) {
+  if (e.target.closest('.card') || e.target.closest('#toolbox-panel') || e.target.closest('#toolbox-toggle'))
     return;
-  }
   e.preventDefault();
   createCard(e.clientX, e.clientY);
 });
 
 // Clicking the background ends editing on whatever card was being edited.
 document.addEventListener('mousedown', function (e) {
-  if (editingCard && !editingCard.contains(e.target)) {
+  if (editingCard && !editingCard.contains(e.target))
     exitEditMode();
-  }
 });
 
 // Backspace deletes the highlighted card, but only when not editing.
@@ -217,9 +212,8 @@ function renderToolboxItem(item) {
   deleteBtn.addEventListener('click', function (e) {
     e.stopPropagation();
     var index = toolboxItems.indexOf(item);
-    if (index !== -1) {
+    if (index !== -1)
       toolboxItems.splice(index, 1);
-    }
     el.remove();
     saveToolboxItems();
   });
@@ -231,9 +225,8 @@ toolboxItems.forEach(renderToolboxItem);
 
 toolboxAdd.addEventListener('click', function () {
   var active = document.querySelector('.card.active');
-  if (!active) {
+  if (!active)
     return;
-  }
 
   var text = getCardText(active);
   var title = (text.split('\n')[0] || '').trim() || '(untitled)';
@@ -250,21 +243,18 @@ document.addEventListener('dragover', function (e) {
 });
 
 document.addEventListener('drop', function (e) {
-  if (e.target.closest('#toolbox-panel') || e.target.closest('#toolbox-toggle')) {
+  if (e.target.closest('#toolbox-panel') || e.target.closest('#toolbox-toggle'))
     return;
-  }
   e.preventDefault();
 
   var text = e.dataTransfer.getData('text/plain');
-  if (!text) {
+  if (!text)
     return;
-  }
 
   var card = createCard(e.clientX, e.clientY);
   var p = card.querySelector('p');
-  if (p) {
+  if (p)
     p.textContent = text;
-  }
 });
 
 // Every second, describe the current cards as claims and run them through
@@ -277,9 +267,8 @@ document.addEventListener('drop', function (e) {
 //   the content of (card) is (text)      -> signature "the content of _ is _"
 
 function getCardText(card) {
-  if (card.classList.contains('editing')) {
+  if (card.classList.contains('editing'))
     return card.dataset.originalText || '';
-  }
   return card.textContent.trim();
 }
 
@@ -287,9 +276,8 @@ function buildCardClaims() {
   var claims = {};
 
   function addClaim(signature, items) {
-    if (!claims[signature]) {
+    if (!claims[signature])
       claims[signature] = [];
-    }
     claims[signature].push(items);
   }
 
@@ -312,9 +300,8 @@ function mergeClaims(a, b) {
   var merged = {};
   [a, b].forEach(function (claims) {
     Object.keys(claims).forEach(function (signature) {
-      if (!merged[signature]) {
+      if (!merged[signature])
         merged[signature] = [];
-      }
       merged[signature] = merged[signature].concat(claims[signature]);
     });
   });
@@ -330,9 +317,8 @@ setInterval(function () {
   program.forEach(function (item) {
     if (item.type === 'claim') {
       var signature = item.phrase.signature;
-      if (!bootstrapClaims[signature]) {
+      if (!bootstrapClaims[signature])
         bootstrapClaims[signature] = [];
-      }
       bootstrapClaims[signature].push(item.phrase.items);
     }
   });
@@ -348,12 +334,10 @@ setInterval(function () {
 
   var result = DatalogEngine.evaluate(rules, claims, {
     'point _ _ is inside of _': function (x, y, card) {
-      if (x === undefined || y === undefined) {
+      if (x === undefined || y === undefined)
         throw new Error('point _ _ is inside of _ requires x and y');
-      }
-      if (card !== undefined) {
+      if (card !== undefined)
         return intersects(x, y, card) ? [[x, y, card]] : [];
-      }
       return Object.keys(cardDict)
         .filter(id => intersects(x, y, id))
         .map(c => [x, y, c]);

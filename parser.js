@@ -1,6 +1,6 @@
 var Parser = (function () {
 
-  const codeRegex = /(?<isWhitespace>\s+)|(?<isComment>;[^\n]*)|[,:.[\]()]|"[^\\"]*(\\.[^\\"]*)*"|(?<isNumber>-?\d[\d.]*)|[^\s,:.[\]()]+/g;
+  const codeRegex = /(?<isWhitespace>\s+)|(?<isComment>;[^\n]*)|[,:.[\]()]|"[^\\"]*(\\.[^\\"]*)*"|(?<isNumber>-?\d([\d.]*\d)?)|[^\s,:.[\]()"]+/g;
 
   // Private functions
 
@@ -50,11 +50,15 @@ var Parser = (function () {
       .filter(m => !m.groups.isComment)
       .map(m => {
         const text = m[0];
+        try{
         if(text.startsWith('"') || m.groups.isNumber)
           return { type: 'value', value: JSON.parse(text) };
+        }catch(e){
+          debugger;
+        }
         if(text.length === 1 && ',:.[]()'.indexOf(text) !== -1)
           return { type: 'delimiter', character: text };
-        return { type: 'symbol', name: text.toLowerCase() };
+        return { type: 'symbol', name: text };
       })
       .toArray();
     // Prepare to read tokens
@@ -150,14 +154,14 @@ var Parser = (function () {
     function tryParseStatement() {
       const nextToken = peekNext();
       if(nextToken.type !== 'symbol') return null;
-      switch(nextToken.name) {
+      switch(nextToken.name.toLowerCase()) {
         case 'claim':
         case 'wish':
         case 'remember':
         case 'forget':
           takeNext();
           const statement = {
-            type: nextToken.name,
+            type: nextToken.name.toLowerCase(),
             phrase: parsePhrase(),
           };
           const period = takeNext();
@@ -173,7 +177,7 @@ var Parser = (function () {
       // Check for 'when'
       const whenToken = peekNext();
       if(whenToken.type !== 'symbol' ||
-         whenToken.name !== 'when')
+         whenToken.name.toLowerCase() !== 'when')
         return null;
       takeNext(); // discard the 'when'
 
@@ -232,7 +236,7 @@ var Parser = (function () {
       // Check for 'end'
       const endToken = takeNext();
       if(endToken.type !== 'symbol' ||
-         endToken.name !== 'end')
+         endToken.name.toLowerCase() !== 'end')
         throw new Error("'When' block did not end with 'end'.");
 
       return {

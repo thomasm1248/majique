@@ -1,9 +1,6 @@
 var Parser = (function () {
 
-  // TODO allow special characters in strings
-  // TODO honestly, the whole parser needs to be redone
-  const codeRegex = /When|End|Claim|Wish|[,:.[\]]|(?<isWhitespace>\s+)|;[^\n]*|[^WEC,:.\]]+/g;
-  const phraseRegex = /(?<string>"[^"]*")|\((?<expr>[^)]*)\)/g;
+  const codeRegex = /(?<isWhitespace>\s+)|(?<isComment>;[^\n]*)|[,:.[\]()]|"[^\\"]*(\\.[^\\"]*)*"|(?<isNumber>-?\d[\d.]*)|[^\s,:.[\]()]+/g;
 
   // Private functions
 
@@ -47,11 +44,20 @@ var Parser = (function () {
   // Public functions
 
   function parse(code) {
+    // Parse and classify tokens
     const tokens = code.matchAll(codeRegex)
       .filter(m => !m.groups.isWhitespace)
-      .filter(m => !m[0].startsWith(';'))
-      .map(m => m[0])
+      .filter(m => !m.groups.isComment)
+      .map(m => {
+        const text = m[0];
+        if(text.startsWith('"') || m.groups.isNumber)
+          return { type: 'value', value: JSON.parse(text) };
+        if(text.length === 1 && ',:.[]()'.indexOf(text) !== -1)
+          return { type: 'delimiter', character: text };
+        return { type: 'symbol', name: text.toLowerCase() };
+      })
       .toArray();
+    // Prepare to read tokens
     let i = 0;
     function peekNext() {
       return tokens[i];
@@ -62,63 +68,173 @@ var Parser = (function () {
     function hasNext() {
       return i < tokens.length;
     }
-    function parseTopLevelClaim() {
-      if(takeNext() !== 'Claim')
-        throw new Error('Expected "Claim".');
-      const phrase = parsePhrase(takeNext());
-      if(takeNext() !== '.')
-        throw new Error("Claims must end with '.'.");
+    // Functions for parsing program using recursive-descent
+    // If a function's name starts with 'try', it returns
+    // null on failure instead of throwing an exception.
+    function parseSlotContents() {
+      // Check for number/string
+      const nextToken = peekNext();
+      if(nextToken.type === 'value') {
+        takeNext();
+        return nextToken.value;
+      }
+
+      // Parse multi-word symbol
+      const words = [];
+      while(true) {
+        const token = peekNext();
+        if(token.type === 'symbol') {
+          takeNext();
+          words.push(token.name);
+          continue;
+        }
+        if(token.type === 'value') {
+          takeNext();
+          words.push(token.value.toString());
+          continue;
+        }
+        break;
+      }
+      return { type: 'symbol', name: words.join(' ') };
+    }
+    function parsePhrase() {
+      const signatureParts = [];
+      const items = [];
+
+      while(true) {
+        const nextToken = peekNext();
+        
+        // Symbols
+        if(nextToken.type === 'symbol') {
+          takeNext();
+          signatureParts.push(nextToken.name);
+          continue;
+        }
+
+        // Values
+        if(nextToken.type === 'value') {
+          takeNext();
+          signatureParts.push('_');
+          items.push(nextToken.value);
+          continue;
+        }
+        
+        // Slots
+        if(nextToken.type === 'delimiter' &&
+           nextToken.character === '(') {
+          takeNext();
+          signatureParts.push('_');
+          items.push(parseSlotContents());
+          const closingParen = takeNext();
+          if(closingParen.type !== 'delimiter' ||
+             closingParen.character !== ')')
+            throw new Error('A condition slot was not closed with a ")".');
+          continue;
+        }
+
+        // Delimiters
+        if(nextToken.type === 'delimiter') {
+          break;
+        }
+
+        // Unknown
+        throw new Error('Every phrase must end in a delimiter.');
+        // This is probably not possible.
+      }
+
       return {
-        type: 'claim',
-        phrase,
+        signature: signatureParts.join(' '),
+        items,
       };
     }
-    function parseRule() {
-      if(peekNext() !== 'When')
-        throw new Error('Expected "When".');
+    function tryParseStatement() {
+      const nextToken = peekNext();
+      if(nextToken.type !== 'symbol') return null;
+      switch(nextToken.name) {
+        case 'claim':
+        case 'wish':
+        case 'remember':
+        case 'forget':
+          takeNext();
+          const statement = {
+            type: nextToken.name,
+            phrase: parsePhrase(),
+          };
+          const period = takeNext();
+          if(period.type !== 'delimiter' &&
+             period.character !== '.')
+            throw new Error('A statement did not end with a period.');
+          return statement;
+        default:
+          return null;
+      }
+    }
+    function tryParseRule() {
+      // Check for 'when'
+      const whenToken = peekNext();
+      if(whenToken.type !== 'symbol' ||
+         whenToken.name !== 'when')
+        return null;
+      takeNext(); // discard the 'when'
+
+      // Read conditions
       const conditions = [];
       let hasACollectedCondition = false;
-      while(takeNext() !== ':') {
-        const isCollected = peekNext() === '[';
+      while(true) {
+        // Check for [
+        const nextToken = peekNext();
+        const isCollected = nextToken.type === 'delimiter' &&
+                            nextToken.character === '[';
         if(isCollected) takeNext();
-        const phrase = parsePhrase(takeNext());
+
+        // Read phrase
+        const phrase = parsePhrase();
         conditions.push(phrase);
+
+        // Check for ]
         if(isCollected) {
-          if(takeNext() !== ']')
+          const collectorClose = takeNext();
+          if(collectorClose.type !== 'delimiter' ||
+             collectorClose.character !== ']')
             throw new Error('Collection must end with "]".');
           phrase.isCollected = true;
           hasACollectedCondition = true;
         }
+
+        // Read ',' or ':'
+        const finalToken = takeNext();
+        if(finalToken.type !== 'delimiter')
+          throw new Error('A condition in a "when" block did not' +
+            ' end with either a comma or colon.');
+        if(finalToken.character === ',')
+          continue;
+        if(finalToken.character === ':')
+          break;
+        throw new Error('A condition in a "when" block did not' +
+          ' end with either a comma or colon.');
       }
+
+      // Read statements
       const statements = [];
-      while(peekNext() !== 'End') {
-        switch(peekNext()) {
-          case 'Claim':
-            if(hasACollectedCondition)
-              throw new Error("'When' blocks with a collector [...] cannot contains Claims.");
-            takeNext();
-            statements.push({
-              type: 'claim',
-              phrase: parsePhrase(takeNext()),
-            });
-            if(takeNext() !== '.')
-              throw new Error("Claims must end with '.'.");
-            break;
-          case 'Wish':
-            takeNext();
-            statements.push({
-              type: 'wish',
-              phrase: parsePhrase(takeNext()),
-            });
-            if(takeNext() !== '.')
-              throw new Error("Wishes must end with '.'.");
-            break;
-          // TODO add Remember and Forget
-          default:
-            throw new Error('Expected either Claim or Wish.');
-        }
+      while(true) {
+        const statement = tryParseStatement();
+        if(!statement)
+          break;
+
+        // For for illegal claims
+        if(statement.type === 'claim' &&
+           hasACollectedCondition)
+          throw new Error("'When' blocks with a collector [...] cannot contains Claims.");
+
+        statements.push(statement);
       }
-      takeNext();
+
+      // Check for 'end'
+      const endToken = takeNext();
+      if(endToken.type !== 'symbol' ||
+         endToken.name !== 'end')
+        throw new Error("'When' block did not end with 'end'.");
+
       return {
         type: 'rule',
         conditions,
@@ -129,17 +245,23 @@ var Parser = (function () {
     function parseProgram() {
       const items = [];
       while(hasNext()) {
-        switch(peekNext()) {
-          case 'Claim':
-            items.push(parseTopLevelClaim());
-            break;
-          case 'When':
-            items.push(parseRule());
-            break;
-          // TODO add Wish, Remember, and Forget
-          default:
-            throw new Error(`Expected either "Claim" or "When", got "${peekNext()}".`);
+        // Parse a statement?
+        const statement = tryParseStatement();
+        if(statement) {
+          items.push(statement);
+          continue;
         }
+
+        // Parse a rule?
+        const rule = tryParseRule();
+        if(rule) {
+          items.push(rule);
+          continue;
+        }
+
+        // Oh no, unidentified code
+        throw new Error(`Expected either "When", "Claim", "Wish",` +
+          ` "Remember", or "Forget", but got "${peekNext()}".`);
       }
       return items;
     }

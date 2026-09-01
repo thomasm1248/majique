@@ -313,11 +313,24 @@ var DatalogEngine = (function () {
             if (condition.signature in resolvers) {
               return; // resolvers are never the delta position -- they're always live
             }
-            solve(rule.conditions, 0, {}, function (index, signature) {
-              return (index === deltaIndex ? delta : full)[signature] || [];
-            }, resolvers, function (bindings) {
-              applyStatements(rule, bindings);
-            });
+            solve(
+              rule.conditions,
+              0,
+              {},
+              function (index, signature) {
+                if(index > deltaIndex)
+                  return combinedCandidates(index, signature);
+                return (
+                  index === deltaIndex
+                    ? delta
+                    : full
+                )
+                [signature] || [];
+              },
+              resolvers,
+              function (bindings) {
+                applyStatements(rule, bindings);
+              });
           });
         }
 

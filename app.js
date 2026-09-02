@@ -501,6 +501,15 @@ setInterval(function () {
       // TODO strengthen against failure
       return [[inputs.join(delimiter), inputs, delimiter]];
     },
+    '_ has _ items': function(list, length) {
+      // TODO strengthen agaist failure
+      return [[list, list.length]];
+    },
+    '_ is item _ of _': function(item, number, list) {
+      if(number === undefined)
+        return list.map((x, i) => [x, i+1, list]);
+      return [[list[number-1], number, list]];
+    },
   }, {
     'background color of _ is _': function (card, color) {
       const cardElement = cardDict[card];

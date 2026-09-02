@@ -108,7 +108,7 @@ var DatalogEngine = (function () {
       var conditionItem = condition.items[i];
       var factItem = items[i];
 
-      if (typeof conditionItem === 'string' || typeof conditionItem === 'number' || Array.isArray(conditionItem)) {
+      if (typeof conditionItem === 'string' || typeof conditionItem === 'number') {
         if (conditionItem !== factItem) return null;
       } else {
         var existing = next[conditionItem.name];
@@ -126,6 +126,7 @@ var DatalogEngine = (function () {
   // Compute the current value for a condition item -- its literal,
   // or its bound value (undefined if not yet bound).
   function resolveArgument(item, bindings) {
+    // TODO check usage of the function to determine if arrays can be blocked here
     if (typeof item === 'string' || typeof item === 'number' || Array.isArray(item)) return item;
     return bindings[item.name];
   }
@@ -368,6 +369,7 @@ var DatalogEngine = (function () {
           });
         } else {
           rule.conditions.forEach(function (condition, deltaIndex) {
+            // TODO try skipping all non-recursive claims and see if it improves performance
             if (condition.signature in resolvers) {
               return; // resolvers are never the delta position -- they're always live
             }

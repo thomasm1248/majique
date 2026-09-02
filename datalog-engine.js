@@ -52,6 +52,26 @@
 //   const facts = DatalogEngine.evaluate(rules, seedFacts, resolvers);
 
 var DatalogEngine = (function () {
+  // For persistant claims
+  let memory = [];
+
+  function updateMemory(factsToForget, factsToRemember) {
+    // Forget facts
+    const forgetKeySet = new Set();
+    for(const fact of factsToForget)
+      forgetKeySet.add(factKey(fact));
+    memory = memory
+      .filter(fact => !forgetKeySet.has(factKey(fact)));
+
+    // Remember facts
+    const existingMemoryKeySet = new Set();
+    for(const fact of memory)
+      existingMemoryKeySet.add(factKey(fact));
+    for(const fact of factsToRemember)
+      if(!existingMemoryKeySet.has(factKey(fact)))
+        memory.push(fact);
+  }
+
   function factKey(fact) {
     return fact.signature + '|' + fact.items.map(JSON.stringify).join('|');
   }
@@ -61,6 +81,7 @@ var DatalogEngine = (function () {
     return {
       signature: phrase.signature,
       items: phrase.items.map(function (item) {
+        // TODO check usage of the function to determine if arrays can be blocked here
         if (typeof item === 'string' || typeof item === 'number' || Array.isArray(item)) {
           return item;
         }
@@ -87,7 +108,7 @@ var DatalogEngine = (function () {
       var conditionItem = condition.items[i];
       var factItem = items[i];
 
-      if (typeof conditionItem === 'string' || typeof conditionItem === 'number' || Array.isArray(conditionItem)) {
+      if (typeof conditionItem === 'string' || typeof conditionItem === 'number') {
         if (conditionItem !== factItem) return null;
       } else {
         var existing = next[conditionItem.name];
@@ -105,6 +126,7 @@ var DatalogEngine = (function () {
   // Compute the current value for a condition item -- its literal,
   // or its bound value (undefined if not yet bound).
   function resolveArgument(item, bindings) {
+    // TODO check usage of the function to determine if arrays can be blocked here
     if (typeof item === 'string' || typeof item === 'number' || Array.isArray(item)) return item;
     return bindings[item.name];
   }
@@ -186,6 +208,10 @@ var DatalogEngine = (function () {
     var factSet = new Set();
     var printedWishes = new Set();
 
+    const factsToForget = [];
+    const factsToRemember = [];
+    // TODO try using sets to dedup these two collections to see if it increases performance
+
     function hasAnyFacts(dict) {
       return Object.keys(dict).length > 0;
     }
@@ -195,6 +221,7 @@ var DatalogEngine = (function () {
       if(source) {
         // Add debug claim
         tryAddFact(dict, '_ claims _', [source, key]);
+        // TODO this is going to cause recursion, so fix this soon
       }
       if (factSet.has(key)) return false;
       factSet.add(key);
@@ -215,6 +242,12 @@ var DatalogEngine = (function () {
         if (statement.type === 'claim') {
           var fact = substitute(statement.phrase, bindings);
           tryAddFact(newDelta, fact.signature, fact.items, rule.source);
+        } else if (statement.type === 'remember') {
+          const memory = substitute(statement.phrase, bindings);
+          factsToRemember.push(memory);
+        } else if (statement.type === 'forget') {
+          const memory = substitute(statement.phrase, bindings);
+          factsToForget.push(memory);
         } else if (statement.type === 'wish') {
           var wish = substitute(statement.phrase, bindings);
           if (wish.signature in granters) {
@@ -236,6 +269,7 @@ var DatalogEngine = (function () {
                 }
 
                 scriptItems.forEach(function (item) {
+                  // TODO for claims, forgets, and remembers, throw errors on unbound variables
                   if (item.type === 'claim') {
                     // Replace 'this' with card id
                     for (let i = 0; i < item.phrase.items.length; i++) {
@@ -245,6 +279,26 @@ var DatalogEngine = (function () {
                         item.phrase.items[i] = cardId;
                     }
                     tryAddFact(newDelta, item.phrase.signature, item.phrase.items, cardId);
+                  } else if (item.type === 'remember') {
+                    // Replace 'this' with card id
+                    for (let i = 0; i < item.phrase.items.length; i++) {
+                      const slot = item.phrase.items[i];
+                      if (slot.type === 'symbol' &&
+                          slot.name === 'this')
+                        item.phrase.items[i] = cardId;
+                    }
+                    // Add to remember list
+                    factsToRemember.push(item.phrase);
+                  } else if (item.type === 'forget') {
+                    // Replace 'this' with card id
+                    for (let i = 0; i < item.phrase.items.length; i++) {
+                      const slot = item.phrase.items[i];
+                      if (slot.type === 'symbol' &&
+                          slot.name === 'this')
+                        item.phrase.items[i] = cardId;
+                    }
+                    // Add to forget list
+                    factsToForget.push(item.phrase);
                   } else if (item.type === 'rule') {
                     // Replace 'this' with card id
                     for (let i = 0; i < item.conditions.length; i++) {
@@ -287,6 +341,11 @@ var DatalogEngine = (function () {
       });
     });
 
+    // Merge memories into the delta
+    memory.forEach(fact => {
+      tryAddFact(delta, fact.signature, fact.items);
+    });
+
     var forceBootstrap = true; // round 1 is always a full/naive bootstrap round
 
     while (forceBootstrap || hasAnyFacts(delta)) {
@@ -310,14 +369,28 @@ var DatalogEngine = (function () {
           });
         } else {
           rule.conditions.forEach(function (condition, deltaIndex) {
+            // TODO try skipping all non-recursive claims and see if it improves performance
             if (condition.signature in resolvers) {
               return; // resolvers are never the delta position -- they're always live
             }
-            solve(rule.conditions, 0, {}, function (index, signature) {
-              return (index === deltaIndex ? delta : full)[signature] || [];
-            }, resolvers, function (bindings) {
-              applyStatements(rule, bindings);
-            });
+            solve(
+              rule.conditions,
+              0,
+              {},
+              function (index, signature) {
+                if(index > deltaIndex)
+                  return combinedCandidates(index, signature);
+                return (
+                  index === deltaIndex
+                    ? delta
+                    : full
+                )
+                [signature] || [];
+              },
+              resolvers,
+              function (bindings) {
+                applyStatements(rule, bindings);
+              });
           });
         }
 
@@ -355,6 +428,8 @@ var DatalogEngine = (function () {
       }
       full[signature] = full[signature].concat(delta[signature]);
     });
+
+    updateMemory(factsToForget, factsToRemember);
 
     const endTime = Date.now();
     console.log(`Ran for ${endTime - startTime} ms`);

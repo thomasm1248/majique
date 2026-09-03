@@ -146,18 +146,32 @@ document.addEventListener('keydown', function (e) {
 });
 
 // --- Toolbox: a small reusable-card palette in the top-left corner. ---
-// Items are just { title, text } -- "recreating" a card means spawning a
-// fresh card and setting its content to the stored text, not restoring the
-// original DOM element (which may no longer exist). Persisted to
-// localStorage so the toolbox survives a page reload.
+// Items are either { type: 'card', title, text } or
+// { type: 'folder', title, children: [...] }. "Recreating" a card means
+// spawning a fresh card and setting its content to the stored text, not
+// restoring the original DOM element (which may no longer exist).
+// Persisted to localStorage so the toolbox survives a page reload.
 
 var TOOLBOX_STORAGE_KEY = 'toolboxItems';
+
+// Older saves are a flat array of { title, text } with no `type` -- treat
+// anything without an explicit type as a card.
+function normalizeToolboxItem(item) {
+  if (item && item.type === 'folder') {
+    return {
+      type: 'folder',
+      title: item.title,
+      children: Array.isArray(item.children) ? item.children.map(normalizeToolboxItem) : [],
+    };
+  }
+  return { type: 'card', title: item.title, text: item.text };
+}
 
 function loadToolboxItems() {
   try {
     var raw = localStorage.getItem(TOOLBOX_STORAGE_KEY);
     var items = raw ? JSON.parse(raw) : [];
-    return Array.isArray(items) ? items : [];
+    return Array.isArray(items) ? items.map(normalizeToolboxItem) : [];
   } catch (e) {
     console.warn('Failed to load toolbox items from localStorage:', e);
     return [];
@@ -172,25 +186,41 @@ function saveToolboxItems() {
   }
 }
 
-var toolboxItems = loadToolboxItems();
+// Count every card nested anywhere inside a folder (recursing into
+// sub-folders), for the "N cards will be deleted" confirmation.
+function countCards(folder) {
+  var count = 0;
+  folder.children.forEach(function (child) {
+    count += child.type === 'folder' ? countCards(child) : 1;
+  });
+  return count;
+}
+
+var toolboxItems = loadToolboxItems(); // root-level list
+var toolboxPath = []; // stack of folder objects -- current view is the last one's children (or the root)
+
+function currentToolboxChildren() {
+  return toolboxPath.length ? toolboxPath[toolboxPath.length - 1].children : toolboxItems;
+}
 
 var toolboxToggle = document.getElementById('toolbox-toggle');
 var toolboxPanel = document.getElementById('toolbox-panel');
+var toolboxBack = document.getElementById('toolbox-back');
 var toolboxList = document.getElementById('toolbox-list');
 var toolboxAdd = document.getElementById('toolbox-add');
+var toolboxCreateFolder = document.getElementById('toolbox-create-folder');
 
 toolboxToggle.addEventListener('click', function () {
   toolboxPanel.classList.toggle('hidden');
 });
 
-function renderToolboxItem(item) {
+function renderToolboxItem(item, parentArray) {
   var el = document.createElement('div');
-  el.className = 'toolbox-item';
+  el.className = 'toolbox-item' + (item.type === 'folder' ? ' toolbox-folder' : '');
   el.title = item.title;
-  el.draggable = true;
 
   var titleSpan = document.createElement('span');
-  titleSpan.textContent = item.title;
+  titleSpan.textContent = (item.type === 'folder' ? '\ud83d\udcc1 ' : '') + item.title;
   el.appendChild(titleSpan);
 
   var deleteBtn = document.createElement('button');
@@ -200,10 +230,18 @@ function renderToolboxItem(item) {
   deleteBtn.draggable = false;
   el.appendChild(deleteBtn);
 
-  el.addEventListener('dragstart', function (e) {
-    e.dataTransfer.effectAllowed = 'copy';
-    e.dataTransfer.setData('text/plain', item.text);
-  });
+  if (item.type === 'folder') {
+    el.addEventListener('click', function () {
+      toolboxPath.push(item);
+      renderToolboxList();
+    });
+  } else {
+    el.draggable = true;
+    el.addEventListener('dragstart', function (e) {
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData('text/plain', item.text);
+    });
+  }
 
   deleteBtn.addEventListener('mousedown', function (e) {
     e.stopPropagation();
@@ -211,31 +249,64 @@ function renderToolboxItem(item) {
 
   deleteBtn.addEventListener('click', function (e) {
     e.stopPropagation();
-    var index = toolboxItems.indexOf(item);
-    if (index !== -1)
-      toolboxItems.splice(index, 1);
-    el.remove();
+
+    if (item.type === 'folder') {
+      var count = countCards(item);
+      if (count > 0 && !confirm(count + ' card' + (count === 1 ? '' : 's') + ' will be deleted. Continue?')) {
+        return;
+      }
+    }
+
+    var index = parentArray.indexOf(item);
+    if (index !== -1) {
+      parentArray.splice(index, 1);
+    }
     saveToolboxItems();
+    renderToolboxList();
   });
 
-  toolboxList.appendChild(el);
+  return el;
 }
 
-toolboxItems.forEach(renderToolboxItem);
+function renderToolboxList() {
+  toolboxList.innerHTML = '';
+  currentToolboxChildren().forEach(function (item) {
+    toolboxList.appendChild(renderToolboxItem(item, currentToolboxChildren()));
+  });
+  toolboxBack.style.display = toolboxPath.length ? 'block' : 'none';
+}
+
+toolboxBack.addEventListener('click', function () {
+  toolboxPath.pop();
+  renderToolboxList();
+});
 
 toolboxAdd.addEventListener('click', function () {
   var active = document.querySelector('.card.active');
-  if (!active)
+  if (!active) {
     return;
+  }
 
   var text = getCardText(active);
   var title = (text.split('\n')[0] || '').trim() || '(untitled)';
 
-  var item = { title: title, text: text };
-  toolboxItems.push(item);
-  renderToolboxItem(item);
+  currentToolboxChildren().push({ type: 'card', title: title, text: text });
   saveToolboxItems();
+  renderToolboxList();
 });
+
+toolboxCreateFolder.addEventListener('click', function () {
+  var name = prompt('Folder name:');
+  if (!name) {
+    return;
+  }
+
+  currentToolboxChildren().push({ type: 'folder', title: name.trim() || 'Untitled', children: [] });
+  saveToolboxItems();
+  renderToolboxList();
+});
+
+renderToolboxList();
 
 // Dropping a toolbox item onto the main area recreates the card it came from.
 document.addEventListener('dragover', function (e) {
@@ -243,18 +314,21 @@ document.addEventListener('dragover', function (e) {
 });
 
 document.addEventListener('drop', function (e) {
-  if (e.target.closest('#toolbox-panel') || e.target.closest('#toolbox-toggle'))
+  if (e.target.closest('#toolbox-panel') || e.target.closest('#toolbox-toggle')) {
     return;
+  }
   e.preventDefault();
 
   var text = e.dataTransfer.getData('text/plain');
-  if (!text)
+  if (!text) {
     return;
+  }
 
   var card = createCard(e.clientX, e.clientY);
   var p = card.querySelector('p');
-  if (p)
+  if (p) {
     p.textContent = text;
+  }
 });
 
 // Every second, describe the current cards as claims and run them through

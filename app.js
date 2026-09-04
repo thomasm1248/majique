@@ -612,7 +612,7 @@ setInterval(function () {
       ctx.fillStyle = magicColor;
       ctx.textBaseline = 'hanging';
       ctx.font = '14px Arial';
-      const lines = text.split('\n');
+      const lines = text.toString().split('\n');
       for(let i = 0; i < lines.length; i++)
         ctx.fillText(lines[i], x, y + i * 16);
     },

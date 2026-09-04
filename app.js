@@ -3,8 +3,6 @@
 
 // TODO switch to plugin-oriented architecture.
 
-const INTERVAL_MS = 100;
-
 var editingCard = null;
 var cardCount = 0;
 const cardDict = {};

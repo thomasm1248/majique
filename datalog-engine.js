@@ -51,7 +51,13 @@
 // Usage:
 //   const facts = DatalogEngine.evaluate(rules, seedFacts, resolvers);
 
-var DatalogEngine = (function () {
+const engineModules = [];
+
+(function () {
+
+  // Config
+  const INTERVAL_MS = 100;
+
   // For persistant claims
   let memory = [];
 
@@ -196,6 +202,7 @@ var DatalogEngine = (function () {
   // the console, handed to a granter, or (for "_ is executed on _") used to
   // load a script's claims/rules into the live evaluation.
   function evaluate(rules, seedFacts, resolvers, granters) {
+    const rules = [];
     const startTime = Date.now();
     evalTime = 0;
 
@@ -437,8 +444,21 @@ var DatalogEngine = (function () {
     return full;
   }
 
-  return {
-    evaluate: evaluate,
-  };
+  function mainLoop() {
+    const resolvers = {};
+    const seedFacts = {};
+
+    for(const module of engineModules) {
+      if(module.observe) {
+        const observation = module.observe();
+        // TODO NOW process statements
+      }
+      if(module.resolvers
+    }
+  }
+
+  // TODO NOW add engine module
+
+  setInterval(mainLoop, INTERVAL_MS);
 
 })();

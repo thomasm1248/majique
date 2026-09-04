@@ -584,6 +584,9 @@ setInterval(function () {
         return list.map((x, i) => [x, i+1, list]);
       return [[list[number-1], number, list]];
     },
+    '_ is sum of _': function(sum, list) {
+      return [[list.reduce((a, b) => a + b, 0), list]];
+    },
   }, {
     'background color of _ is _': function (card, color) {
       const cardElement = cardDict[card];
